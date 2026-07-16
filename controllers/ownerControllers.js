@@ -16,7 +16,7 @@ const createOwner = async (req, res) => {
             idCard: data.idCard,
             address: data.address,
             phone: data.phone,
-            email: data.email
+            email: data.email || null
         });
 
         res.status(201).json({
@@ -73,7 +73,7 @@ const updateOwner = async (req, res) => {
             idCard: data.idCard,
             address: data.address,
             phone: data.phone,
-            email: data.email,
+            email: data.email || null,
             state: data.state
         }, {
             where: { id }
