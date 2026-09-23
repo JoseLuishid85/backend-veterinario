@@ -19,7 +19,7 @@ Owner.init({
     },
     idCard: {
         type: DataTypes.STRING(20),
-        allowNull: false,
+        allowNull: true,
         unique: true
     },
     address: {

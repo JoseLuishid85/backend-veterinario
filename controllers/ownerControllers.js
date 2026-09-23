@@ -2,18 +2,21 @@ const { Owner, Pet } = require('../models/associations');
 
 const createOwner = async (req, res) => {
     const data = req.body;
+    const idCard = data.idCard?.trim() || null;
 
     try {
 
-        const ownerExists = await Owner.findOne({ where: { idCard: data.idCard } });
-        if (ownerExists) {
-            return res.status(400).json({ msg: 'Ya existe un propietario con esa cédula' });
+        if (idCard) {
+            const ownerExists = await Owner.findOne({ where: { idCard } });
+            if (ownerExists) {
+                return res.status(400).json({ msg: 'Ya existe un propietario con esa cédula' });
+            }
         }
 
         const newOwner = await Owner.create({
             firstName: data.firstName,
             lastName: data.lastName,
-            idCard: data.idCard,
+            idCard,
             address: data.address,
             phone: data.phone,
             email: data.email || null
