@@ -1,6 +1,5 @@
 const crypto = require('crypto');
 const { Pet, Owner } = require('../models/associations');
-const generarQR = require('../helpers/generar-qr');
 
 const createPet = async (req, res) => {
     const data = req.body;
@@ -11,7 +10,6 @@ const createPet = async (req, res) => {
         }
 
         const code = crypto.randomUUID();
-        const qrCode = await generarQR(code);
 
         const newPet = await Pet.create({
             name: data.name,
@@ -24,8 +22,7 @@ const createPet = async (req, res) => {
             observations: data.observations,
             photo: req.file ? `/uploads/pets/${req.file.filename}` : null,
             ownerId: data.ownerId,
-            code,
-            qrCode
+            code
         });
 
         res.status(201).json({
