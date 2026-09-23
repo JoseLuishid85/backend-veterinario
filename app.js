@@ -21,6 +21,8 @@ sequelize.sync({ alter: false })
 app.use('/veterinario/api/owner', require('./routes/ownerRouter.js'));
 app.use('/veterinario/api/pet', require('./routes/petRouter.js'));
 
+//Haciendo pRUEBA
+
 const PORT = process.env.PORT || 4000;
 
 app.listen(PORT, () => {
