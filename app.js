@@ -18,8 +18,8 @@ sequelize.sync({ alter: false })
     .catch(err => console.error('Error synchronizing DB:', err));
 
 // Routes
-app.use('/veterinario/api/owner', require('./routes/ownerRouter.js'));
-app.use('/veterinario/api/pet', require('./routes/petRouter.js'));
+app.use('/vete2/api/owner', require('./routes/ownerRouter.js'));
+app.use('/vete2/api/pet', require('./routes/petRouter.js'));
 
 //Haciendo pRUEBA fgfgfgfg
 
