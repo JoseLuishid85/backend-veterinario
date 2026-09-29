@@ -3,6 +3,7 @@ const cors = require('cors');
 require('dotenv').config({ quiet: true });
 const sequelize = require('./config/database');
 require('./models/associations');
+require('./models/User');
 
 const app = express();
 
@@ -18,6 +19,8 @@ sequelize.sync({ alter: false })
     .catch(err => console.error('Error synchronizing DB:', err));
 
 // Routes
+app.use('/vete2/api/login', require('./routes/authRouter.js'));
+app.use('/vete2/api/user', require('./routes/userRouter.js'));
 app.use('/vete2/api/owner', require('./routes/ownerRouter.js'));
 app.use('/vete2/api/pet', require('./routes/petRouter.js'));
 

@@ -1,4 +1,5 @@
 const express = require('express');
+const checkAuth = require('../middlewares/validar-token.js');
 const upload = require('../middlewares/upload.js');
 const {
     createPet,
@@ -12,12 +13,12 @@ const {
 
 const routes = express.Router();
 
-routes.post('/', upload.single('photo'), createPet);
-routes.get('/', getPets);
+routes.post('/', checkAuth, upload.single('photo'), createPet);
+routes.get('/', checkAuth, getPets);
 routes.get('/search/qr/:code', getPetByQrCode);
-routes.get('/owner/:ownerId', getPetsByOwner);
-routes.get('/:id', getPetById);
-routes.put('/:id', upload.single('photo'), updatePet);
-routes.delete('/:id', deletePet);
+routes.get('/owner/:ownerId', checkAuth, getPetsByOwner);
+routes.get('/:id', checkAuth, getPetById);
+routes.put('/:id', checkAuth, upload.single('photo'), updatePet);
+routes.delete('/:id', checkAuth, deletePet);
 
 module.exports = routes;

@@ -1,4 +1,5 @@
 const express = require('express');
+const checkAuth = require('../middlewares/validar-token.js');
 const {
     createOwner,
     getOwners,
@@ -9,10 +10,10 @@ const {
 
 const routes = express.Router();
 
-routes.post('/', createOwner);
-routes.get('/', getOwners);
-routes.get('/:id', getOwnerById);
-routes.put('/:id', updateOwner);
-routes.delete('/:id', deleteOwner);
+routes.post('/', checkAuth, createOwner);
+routes.get('/', checkAuth, getOwners);
+routes.get('/:id', checkAuth, getOwnerById);
+routes.put('/:id', checkAuth, updateOwner);
+routes.delete('/:id', checkAuth, deleteOwner);
 
 module.exports = routes;
