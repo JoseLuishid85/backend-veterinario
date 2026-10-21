@@ -24,6 +24,12 @@ app.use('/vete2/api/user', require('./routes/userRouter.js'));
 app.use('/vete2/api/owner', require('./routes/ownerRouter.js'));
 app.use('/vete2/api/pet', require('./routes/petRouter.js'));
 
+// Historia clinica (antes backend univet)
+app.use('/vete2/api/owner-history', require('./routes/ownerHistoryRouter.js'));
+app.use('/vete2/api/pet-history', require('./routes/petHistoryRouter.js'));
+app.use('/vete2/api/medical-record', require('./routes/medicalRecordRouter.js'));
+app.use('/vete2/api/consultation', require('./routes/consultationRouter.js'));
+
 //Haciendo pRUEBA fgfgfgfg
 
 const PORT = process.env.PORT || 4000;
