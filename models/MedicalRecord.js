@@ -14,8 +14,9 @@ MedicalRecord.init({
         allowNull: false,
         unique: true
     },
+    // Fechas como texto libre a pedido del cliente
     dewormingDate: {
-        type: DataTypes.DATEONLY,
+        type: DataTypes.STRING(100),
         allowNull: true
     },
     dewormingProduct: {
@@ -39,11 +40,11 @@ MedicalRecord.init({
         allowNull: true
     },
     lastHeatDate: {
-        type: DataTypes.DATEONLY, // Ultimo Celo
+        type: DataTypes.STRING(100), // Ultimo Celo
         allowNull: true
     },
     lastDeliveryDate: {
-        type: DataTypes.DATEONLY, // Fecha ultimo Parto
+        type: DataTypes.STRING(100), // Fecha ultimo Parto
         allowNull: true
     },
     state: {

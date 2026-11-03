@@ -26,7 +26,7 @@ const getMedicalRecordByPetId = async (req, res) => {
                     where: { state: true },
                     required: false,
                     separate: true,
-                    order: [['date', 'DESC']]
+                    order: [['createdAt', 'DESC'], ['id', 'DESC']]
                 }
             ]
         });

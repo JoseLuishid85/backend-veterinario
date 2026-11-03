@@ -30,7 +30,10 @@ const createOwnerHistory = async (req, res) => {
 
 const getOwnersHistory = async (req, res) => {
     try {
-        const owners = await OwnerHistory.findAll();
+        const owners = await OwnerHistory.findAll({
+            include: [{ model: PetHistory, as: 'pets', attributes: ['id', 'name', 'petType'] }],
+            order: [['lastName', 'ASC'], ['name', 'ASC']]
+        });
 
         res.json(owners);
     } catch (error) {

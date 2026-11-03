@@ -1,4 +1,8 @@
+const { Op } = require('sequelize');
 const { PetHistory, MedicalRecord, Consultation, OwnerHistory } = require('../models/associations');
+
+const DEFAULT_LIST_LIMIT = 20;
+const MAX_LIST_LIMIT = 1000;
 
 const createConsultation = async (req, res) => {
     const data = req.body;
@@ -57,12 +61,30 @@ const createConsultation = async (req, res) => {
     }
 };
 
+// GET /consultation
+//   ?today=true  -> solo las consultas registradas hoy (por createdAt, ya que "date" es texto libre)
+//   ?limit=N     -> cantidad maxima (por defecto 20, hasta 1000)
 const getConsultations = async (req, res) => {
+    const where = { state: true };
+
+    if (req.query.today === 'true') {
+        const start = new Date();
+        start.setHours(0, 0, 0, 0);
+        const end = new Date(start);
+        end.setDate(end.getDate() + 1);
+        where.createdAt = { [Op.gte]: start, [Op.lt]: end };
+    }
+
+    const requestedLimit = Number.parseInt(req.query.limit, 10);
+    const limit = Number.isInteger(requestedLimit) && requestedLimit > 0
+        ? Math.min(requestedLimit, MAX_LIST_LIMIT)
+        : DEFAULT_LIST_LIMIT;
+
     try {
         const consultations = await Consultation.findAll({
-            where: { state: true },
-            limit: 20,
-            order: [['date', 'DESC']],
+            where,
+            limit,
+            order: [['createdAt', 'DESC'], ['id', 'DESC']],
             include: [
                 {
                     model: MedicalRecord,

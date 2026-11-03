@@ -51,13 +51,13 @@ Consultation.init({
         type: DataTypes.INTEGER,
         allowNull: false
     },
+    // Las fechas se guardan como texto libre a pedido del cliente (ej. "03/11/2026", "hace 3 dias")
     date: {
-        type: DataTypes.DATEONLY,
-        allowNull: false,
-        defaultValue: DataTypes.NOW
+        type: DataTypes.STRING(100),
+        allowNull: false
     },
     symptomsDate: {
-        type: DataTypes.DATEONLY,
+        type: DataTypes.STRING(100),
         allowNull: true
     },
     consultationReason: {
