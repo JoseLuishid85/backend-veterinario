@@ -1,4 +1,31 @@
-const { OwnerHistory, PetHistory } = require('../models/associations');
+const { OwnerHistory, PetHistory, City, Municipality, Parish } = require('../models/associations');
+
+// Incluye parroquia -> municipio -> ciudad del propietario
+const locationInclude = {
+    model: Parish,
+    as: 'parish',
+    attributes: ['id', 'name', 'municipalityId'],
+    include: [{
+        model: Municipality,
+        as: 'municipality',
+        attributes: ['id', 'name', 'cityId'],
+        include: [{ model: City, as: 'city', attributes: ['id', 'name'] }]
+    }]
+};
+
+// Normaliza y valida el parishId recibido. Devuelve { parishId } o { error }.
+const resolveParishId = async (rawParishId) => {
+    if (rawParishId === undefined || rawParishId === null || rawParishId === '') {
+        return { parishId: null };
+    }
+
+    const parish = await Parish.findByPk(rawParishId);
+    if (!parish) {
+        return { error: 'La parroquia seleccionada no existe' };
+    }
+
+    return { parishId: parish.id };
+};
 
 const createOwnerHistory = async (req, res) => {
     const { name, lastName, idNumber, address, phone } = req.body;
@@ -12,8 +39,15 @@ const createOwnerHistory = async (req, res) => {
             });
         }
 
-        // 2. Crear el registro
-        const newOwner = await OwnerHistory.create({ name, lastName, idNumber, address, phone });
+        // 2. Validar la parroquia
+        const { parishId, error } = await resolveParishId(req.body.parishId);
+        if (error) {
+            return res.status(400).json({ msg: error });
+        }
+
+        // 3. Crear el registro
+        const created = await OwnerHistory.create({ name, lastName, idNumber, address, phone, parishId });
+        const newOwner = await OwnerHistory.findByPk(created.id, { include: [locationInclude] });
 
         res.status(201).json({
             msg: "Propietario agregado con éxito",
@@ -31,7 +65,10 @@ const createOwnerHistory = async (req, res) => {
 const getOwnersHistory = async (req, res) => {
     try {
         const owners = await OwnerHistory.findAll({
-            include: [{ model: PetHistory, as: 'pets', attributes: ['id', 'name', 'petType'] }],
+            include: [
+                { model: PetHistory, as: 'pets', attributes: ['id', 'name', 'petType'] },
+                locationInclude
+            ],
             order: [['lastName', 'ASC'], ['name', 'ASC']]
         });
 
@@ -49,7 +86,7 @@ const getOwnerHistoryById = async (req, res) => {
 
     try {
         const owner = await OwnerHistory.findByPk(id, {
-            include: [{ model: PetHistory, as: 'pets' }]
+            include: [{ model: PetHistory, as: 'pets' }, locationInclude]
         });
 
         if (!owner) {
@@ -72,17 +109,20 @@ const updateOwnerHistory = async (req, res) => {
     const { name, lastName, idNumber, address, phone } = req.body;
 
     try {
-        await OwnerHistory.update({
-            name,
-            lastName,
-            idNumber,
-            address,
-            phone
-        }, {
-            where: { id }
-        });
+        const data = { name, lastName, idNumber, address, phone };
 
-        const updatedOwner = await OwnerHistory.findByPk(id);
+        // Solo se modifica la parroquia si viene en el body
+        if (req.body.parishId !== undefined) {
+            const { parishId, error } = await resolveParishId(req.body.parishId);
+            if (error) {
+                return res.status(400).json({ ok: false, msg: error });
+            }
+            data.parishId = parishId;
+        }
+
+        await OwnerHistory.update(data, { where: { id } });
+
+        const updatedOwner = await OwnerHistory.findByPk(id, { include: [locationInclude] });
 
         res.json({
             ok: true,

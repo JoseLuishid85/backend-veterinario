@@ -30,6 +30,10 @@ OwnerHistory.init({
         type: DataTypes.STRING(20),
         allowNull: false
     },
+    parishId: {
+        type: DataTypes.INTEGER,
+        allowNull: true
+    },
     state: {
         type: DataTypes.BOOLEAN,
         defaultValue: true

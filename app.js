@@ -25,10 +25,14 @@ app.use('/vete2/api/owner', require('./routes/ownerRouter.js'));
 app.use('/vete2/api/pet', require('./routes/petRouter.js'));
 
 // Historia clinica (antes backend univet)
+app.use('/vete2/api/data/', require('./routes/dataRouter.js'));
 app.use('/vete2/api/owner-history', require('./routes/ownerHistoryRouter.js'));
 app.use('/vete2/api/pet-history', require('./routes/petHistoryRouter.js'));
 app.use('/vete2/api/medical-record', require('./routes/medicalRecordRouter.js'));
 app.use('/vete2/api/consultation', require('./routes/consultationRouter.js'));
+app.use('/vete2/api/location', require('./routes/locationRouter.js'));
+app.use('/vete2/api/catalog', require('./routes/catalogRouter.js'));
+app.use('/vete2/api/report', require('./routes/reportRouter.js'));
 
 //Haciendo pRUEBA fgfgfgfg
 

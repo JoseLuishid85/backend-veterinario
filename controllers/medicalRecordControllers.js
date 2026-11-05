@@ -1,4 +1,5 @@
 const { PetHistory, OwnerHistory, MedicalRecord, Consultation } = require('../models/associations');
+const { DETAIL_INCLUDES } = require('./consultationControllers');
 
 // Devuelve la mascota (con su propietario) junto a su historia medica y consultas.
 // Si la mascota aun no tiene historia medica, se responde con medicalRecord: null
@@ -26,6 +27,7 @@ const getMedicalRecordByPetId = async (req, res) => {
                     where: { state: true },
                     required: false,
                     separate: true,
+                    include: DETAIL_INCLUDES,
                     order: [['createdAt', 'DESC'], ['id', 'DESC']]
                 }
             ]
