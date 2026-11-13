@@ -161,16 +161,27 @@ const createConsultation = async (req, res) => {
 
 // GET /consultation
 //   ?today=true  -> solo las consultas registradas hoy (por createdAt, ya que "date" es texto libre)
+//   ?yesterday=true -> solo las consultas registradas ayer (para el seguimiento)
+//   ?week=true   -> consultas de esta semana, del lunes hasta ayer (seguimiento del sabado)
 //   ?limit=N     -> cantidad maxima (por defecto 20, hasta 1000)
 const getConsultations = async (req, res) => {
     const where = { state: true };
 
-    if (req.query.today === 'true') {
-        const start = new Date();
-        start.setHours(0, 0, 0, 0);
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+
+    if (req.query.today === 'true' || req.query.yesterday === 'true') {
+        const start = new Date(todayStart);
+        if (req.query.yesterday === 'true') start.setDate(start.getDate() - 1);
         const end = new Date(start);
         end.setDate(end.getDate() + 1);
         where.createdAt = { [Op.gte]: start, [Op.lt]: end };
+    } else if (req.query.week === 'true') {
+        // Desde el lunes de esta semana hasta ayer (el domingo cuenta como fin de la semana que termina)
+        const start = new Date(todayStart);
+        const daysSinceMonday = (start.getDay() + 6) % 7;
+        start.setDate(start.getDate() - daysSinceMonday);
+        where.createdAt = { [Op.gte]: start, [Op.lt]: todayStart };
     }
 
     const requestedLimit = Number.parseInt(req.query.limit, 10);
@@ -194,7 +205,7 @@ const getConsultations = async (req, res) => {
                             as: 'pet',
                             attributes: ['id', 'name', 'petType'],
                             include: [
-                                { model: OwnerHistory, as: 'owner', attributes: ['id', 'name', 'lastName'] }
+                                { model: OwnerHistory, as: 'owner', attributes: ['id', 'name', 'lastName', 'phone'] }
                             ]
                         }
                     ]
