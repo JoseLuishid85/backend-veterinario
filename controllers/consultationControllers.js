@@ -10,8 +10,12 @@ const {
     ComplementaryTest,
     ConsultationComplementaryTest,
     Product,
-    ConsultationTreatment
+    ConsultationTreatment,
+    ConsultationTestFile
 } = require('../models/associations');
+const { toPublicPath, removeUploadedFiles, discardUploadedFiles } = require('../helpers/files');
+
+const TEST_FILES_FOLDER = 'tests';
 
 const DEFAULT_LIST_LIMIT = 20;
 const MAX_LIST_LIMIT = 1000;
@@ -37,6 +41,13 @@ const DETAIL_INCLUDES = [
         include: [{ model: Product, as: 'product', attributes: ['id', 'name'] }],
         separate: true,
         order: [['id', 'ASC']]
+    },
+    {
+        model: ConsultationTestFile,
+        as: 'testFiles',
+        attributes: ['id', 'consultationId', 'complementaryTestId', 'filePath', 'originalName', 'mimeType', 'size', 'createdAt'],
+        separate: true,
+        order: [['id', 'ASC']]
     }
 ];
 
@@ -45,7 +56,11 @@ const DETAIL_INCLUDES = [
 //   complementaryTests: [{ complementaryTestId, detail }]          (solo las marcadas)
 //   treatment:          [{ productId, baseDose, presentation, route, frequencyDuration }] (solo filas con producto)
 // Si alguno no viene como arreglo, ese detalle no se toca.
+// Devuelve las rutas de archivos adjuntos que quedaron huerfanos (pruebas desmarcadas) para
+// borrarlos del disco DESPUES de confirmar la transaccion.
 async function saveConsultationDetails(consultationId, { organs, complementaryTests, treatment }, transaction) {
+    const orphanFiles = [];
+
     if (Array.isArray(organs)) {
         await ConsultationOrgan.destroy({ where: { consultationId }, transaction });
         const rows = organs
@@ -60,6 +75,18 @@ async function saveConsultationDetails(consultationId, { organs, complementaryTe
             .filter((t) => t?.complementaryTestId)
             .map((t) => ({ consultationId, complementaryTestId: t.complementaryTestId, detail: t.detail || null }));
         if (rows.length) await ConsultationComplementaryTest.bulkCreate(rows, { transaction });
+
+        // Los archivos de las pruebas que se desmarcaron se eliminan
+        const keptTestIds = rows.map((r) => r.complementaryTestId);
+        const orphanWhere = {
+            consultationId,
+            ...(keptTestIds.length ? { complementaryTestId: { [Op.notIn]: keptTestIds } } : {})
+        };
+        const orphans = await ConsultationTestFile.findAll({ where: orphanWhere, attributes: ['id', 'filePath'], transaction });
+        if (orphans.length) {
+            await ConsultationTestFile.destroy({ where: { id: orphans.map((f) => f.id) }, transaction });
+            orphanFiles.push(...orphans.map((f) => f.filePath));
+        }
     }
 
     if (Array.isArray(treatment)) {
@@ -77,6 +104,8 @@ async function saveConsultationDetails(consultationId, { organs, complementaryTe
             }));
         if (rows.length) await ConsultationTreatment.bulkCreate(rows, { transaction });
     }
+
+    return orphanFiles;
 }
 
 // Campos obligatorios de una consulta: fecha y motivo
@@ -295,7 +324,7 @@ const updateConsultation = async (req, res) => {
             return res.status(404).json({ ok: false, msg: `No existe una consulta con el id ${id}` });
         }
 
-        await sequelize.transaction(async (transaction) => {
+        const orphanFiles = await sequelize.transaction(async (transaction) => {
             await consultation.update({
                 date: data.date,
                 symptomsDate: data.symptomsDate,
@@ -311,14 +340,18 @@ const updateConsultation = async (req, res) => {
                 ...pickFollowUp(data)
             }, { transaction });
 
-            await saveConsultationDetails(consultation.id, data, transaction);
+            const orphans = await saveConsultationDetails(consultation.id, data, transaction);
 
             // Los anamnesicos se guardan en la historia medica de la mascota
             await MedicalRecord.update(pickAnamnesis(data), {
                 where: { id: consultation.medicalRecordId },
                 transaction
             });
+
+            return orphans;
         });
+
+        await removeUploadedFiles(orphanFiles);
 
         const updatedConsultation = await Consultation.findByPk(id, { include: DETAIL_INCLUDES });
         res.json({ ok: true, consultation: updatedConsultation });
@@ -339,8 +372,70 @@ const deleteConsultation = async (req, res) => {
     }
 };
 
+// POST /consultation/:id/test-files   (multipart: complementaryTestId + files[])
+// Adjunta archivos (PDF o imagen) a una prueba complementaria marcada en la consulta.
+const uploadTestFiles = async (req, res) => {
+    const { id } = req.params;
+    const files = req.files || [];
+    const complementaryTestId = Number.parseInt(req.body.complementaryTestId, 10);
+
+    const reject = async (status, msg) => {
+        await discardUploadedFiles(TEST_FILES_FOLDER, files);
+        return res.status(status).json({ ok: false, msg });
+    };
+
+    try {
+        if (files.length === 0) return reject(400, 'No se recibió ningún archivo');
+        if (!Number.isInteger(complementaryTestId)) return reject(400, 'Debe indicar la prueba complementaria');
+
+        const consultation = await Consultation.findByPk(id, { attributes: ['id'] });
+        if (!consultation) return reject(404, `No existe una consulta con el id ${id}`);
+
+        // Solo se adjuntan archivos a pruebas marcadas en esta consulta
+        const testInConsultation = await ConsultationComplementaryTest.findOne({
+            where: { consultationId: consultation.id, complementaryTestId }
+        });
+        if (!testInConsultation) return reject(400, 'La prueba no está marcada en esta consulta');
+
+        const created = await ConsultationTestFile.bulkCreate(files.map((file) => ({
+            consultationId: consultation.id,
+            complementaryTestId,
+            filePath: toPublicPath(TEST_FILES_FOLDER, file),
+            // multer entrega el nombre original en latin1; se pasa a utf8 para conservar acentos
+            originalName: Buffer.from(file.originalname, 'latin1').toString('utf8').slice(0, 255),
+            mimeType: file.mimetype,
+            size: file.size
+        })));
+
+        res.status(201).json({ ok: true, files: created });
+    } catch (error) {
+        console.error(error);
+        await discardUploadedFiles(TEST_FILES_FOLDER, files);
+        res.status(500).json({ ok: false, msg: 'Error al guardar los archivos' });
+    }
+};
+
+// DELETE /consultation/test-files/:fileId
+const deleteTestFile = async (req, res) => {
+    const { fileId } = req.params;
+    try {
+        const file = await ConsultationTestFile.findByPk(fileId);
+        if (!file) {
+            return res.status(404).json({ ok: false, msg: 'El archivo no existe' });
+        }
+        await file.destroy();
+        await removeUploadedFiles([file.filePath]);
+        res.json({ ok: true, msg: 'Archivo eliminado' });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ ok: false, msg: 'Error al eliminar el archivo' });
+    }
+};
+
 module.exports = {
     DETAIL_INCLUDES,
+    uploadTestFiles,
+    deleteTestFile,
     createConsultation,
     getConsultations,
     getConsultationById,

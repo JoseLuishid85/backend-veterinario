@@ -12,6 +12,8 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cors());
 app.use('/uploads', express.static('uploads'));
+// Mismo contenido bajo el prefijo de la API, para que el frontend arme las URLs desde VITE_API_URL
+app.use('/vete2/uploads', express.static('uploads'));
 
 // Database Sync
 sequelize.sync({ alter: false })

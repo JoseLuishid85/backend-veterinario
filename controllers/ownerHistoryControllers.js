@@ -2,6 +2,7 @@ const { Op } = require('sequelize');
 const sequelize = require('../config/database');
 const { OwnerHistory, PetHistory, City, Municipality, Parish } = require('../models/associations');
 const { destroyPetWithHistory } = require('./petHistoryControllers');
+const { removeUploadedFiles } = require('../helpers/files');
 
 // Incluye parroquia -> municipio -> ciudad del propietario
 const locationInclude = {
@@ -202,13 +203,17 @@ const deleteOwnerHistory = async (req, res) => {
         }
 
         // Las mascotas inactivas (eliminadas logicamente antes) se borran con su historia
-        await sequelize.transaction(async (t) => {
+        const filesToRemove = await sequelize.transaction(async (t) => {
             const inactivePets = await PetHistory.findAll({ where: { ownerId: id }, attributes: ['id'], transaction: t });
+            const files = [];
             for (const pet of inactivePets) {
-                await destroyPetWithHistory(pet.id, t);
+                const result = await destroyPetWithHistory(pet.id, t);
+                files.push(...result.files);
             }
             await owner.destroy({ transaction: t });
+            return files;
         });
+        await removeUploadedFiles(filesToRemove);
 
         res.json({
             ok: true,

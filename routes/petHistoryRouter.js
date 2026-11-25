@@ -6,10 +6,17 @@ const {
     getPetHistoryById,
     getPetsHistoryByOwnerId,
     updatePetHistory,
-    deletePetHistory
+    deletePetHistory,
+    updatePetHistoryPhoto,
+    deletePetHistoryPhoto
 } = require('../controllers/petHistoryControllers.js');
+const { petHistoryPhotoUpload } = require('../middlewares/upload.js');
 
 const routes = express.Router();
+
+// Foto de la mascota
+routes.put('/:id/photo', checkAuth, petHistoryPhotoUpload, updatePetHistoryPhoto);
+routes.delete('/:id/photo', checkAuth, deletePetHistoryPhoto);
 
 routes.post('/', checkAuth, createPetHistory);
 routes.get('/', checkAuth, getPetsHistory);

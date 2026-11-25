@@ -13,6 +13,7 @@ const ComplementaryTest = require('./ComplementaryTest');
 const ConsultationComplementaryTest = require('./ConsultationComplementaryTest');
 const Product = require('./Product');
 const ConsultationTreatment = require('./ConsultationTreatment');
+const ConsultationTestFile = require('./ConsultationTestFile');
 
 // --- Relaciones de Uno a Muchos (1:N) ---
 
@@ -66,6 +67,10 @@ ConsultationComplementaryTest.belongsTo(Consultation, { foreignKey: 'consultatio
 ComplementaryTest.hasMany(ConsultationComplementaryTest, { foreignKey: 'complementaryTestId', as: 'consultationTests' });
 ConsultationComplementaryTest.belongsTo(ComplementaryTest, { foreignKey: 'complementaryTestId', as: 'test' });
 
+// Una consulta tiene muchos archivos adjuntos a sus pruebas complementarias
+Consultation.hasMany(ConsultationTestFile, { foreignKey: 'consultationId', as: 'testFiles' });
+ConsultationTestFile.belongsTo(Consultation, { foreignKey: 'consultationId', as: 'consultation' });
+
 // --- Tratamiento Asignado ---
 
 // Una consulta tiene muchas filas de tratamiento
@@ -91,5 +96,6 @@ module.exports = {
     ComplementaryTest,
     ConsultationComplementaryTest,
     Product,
-    ConsultationTreatment
+    ConsultationTreatment,
+    ConsultationTestFile
 };

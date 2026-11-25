@@ -6,13 +6,20 @@ const {
     Consultation,
     ConsultationOrgan,
     ConsultationComplementaryTest,
-    ConsultationTreatment
+    ConsultationTreatment,
+    ConsultationTestFile
 } = require('../models/associations');
+const { toPublicPath, removeUploadedFiles, discardUploadedFiles } = require('../helpers/files');
+
+const PET_PHOTO_FOLDER = 'pets-history';
 
 // Elimina fisicamente una mascota junto con su historia medica y todas sus consultas
 // (y el detalle de cada consulta). Debe ejecutarse dentro de una transaccion.
-// Devuelve la cantidad de consultas eliminadas.
+// Devuelve { consultationsDeleted, files }: "files" son las rutas de archivos (foto y adjuntos
+// de pruebas) que hay que borrar del disco DESPUES de confirmar la transaccion.
 const destroyPetWithHistory = async (petId, transaction) => {
+    const pet = await PetHistory.findByPk(petId, { attributes: ['id', 'photo'], transaction });
+    const files = pet?.photo ? [pet.photo] : [];
     const records = await MedicalRecord.findAll({ where: { petId }, attributes: ['id'], transaction });
     const recordIds = records.map((r) => r.id);
     let consultationsDeleted = 0;
@@ -30,6 +37,9 @@ const destroyPetWithHistory = async (petId, transaction) => {
             await ConsultationOrgan.destroy({ where, transaction });
             await ConsultationComplementaryTest.destroy({ where, transaction });
             await ConsultationTreatment.destroy({ where, transaction });
+            const testFiles = await ConsultationTestFile.findAll({ where, attributes: ['filePath'], transaction });
+            files.push(...testFiles.map((f) => f.filePath));
+            await ConsultationTestFile.destroy({ where, transaction });
             consultationsDeleted = await Consultation.destroy({ where: { id: consultationIds }, transaction });
         }
 
@@ -37,7 +47,7 @@ const destroyPetWithHistory = async (petId, transaction) => {
     }
 
     await PetHistory.destroy({ where: { id: petId }, transaction });
-    return consultationsDeleted;
+    return { consultationsDeleted, files };
 };
 
 const createPetHistory = async (req, res) => {
@@ -54,7 +64,7 @@ const createPetHistory = async (req, res) => {
             petType: data.petType,
             birthDate: data.birthDate,
             color: data.color,
-            photo: data.photo,
+            // La foto se sube aparte con PUT /pet-history/:id/photo
             gender: data.gender,
             weight: data.weight,
             ownerId: data.ownerId
@@ -146,7 +156,7 @@ const updatePetHistory = async (req, res) => {
             petType: data.petType,
             birthDate: data.birthDate,
             color: data.color,
-            photo: data.photo,
+            // La foto se cambia aparte con PUT/DELETE /pet-history/:id/photo
             gender: data.gender,
             weight: data.weight,
             ownerId: data.ownerId,
@@ -177,7 +187,8 @@ const deletePetHistory = async (req, res) => {
             return res.status(404).json({ ok: false, msg: `No existe una mascota con el id ${id}` });
         }
 
-        const consultationsDeleted = await sequelize.transaction((t) => destroyPetWithHistory(pet.id, t));
+        const { consultationsDeleted, files } = await sequelize.transaction((t) => destroyPetWithHistory(pet.id, t));
+        await removeUploadedFiles(files);
 
         res.json({
             ok: true,
@@ -192,7 +203,55 @@ const deletePetHistory = async (req, res) => {
     }
 };
 
+// PUT /pet-history/:id/photo   (multipart: photo)
+// Sube o reemplaza la foto de la mascota (la anterior se borra del disco).
+const updatePetHistoryPhoto = async (req, res) => {
+    const { id } = req.params;
+    const file = req.file;
+    try {
+        if (!file) {
+            return res.status(400).json({ ok: false, msg: 'No se recibió ninguna foto' });
+        }
+
+        const pet = await PetHistory.findByPk(id);
+        if (!pet) {
+            await discardUploadedFiles(PET_PHOTO_FOLDER, [file]);
+            return res.status(404).json({ ok: false, msg: `No existe una mascota con el id ${id}` });
+        }
+
+        const previousPhoto = pet.photo;
+        await pet.update({ photo: toPublicPath(PET_PHOTO_FOLDER, file) });
+        if (previousPhoto && previousPhoto !== pet.photo) await removeUploadedFiles([previousPhoto]);
+
+        res.json({ ok: true, pet });
+    } catch (error) {
+        console.error(error);
+        if (file) await discardUploadedFiles(PET_PHOTO_FOLDER, [file]);
+        res.status(500).json({ ok: false, msg: 'Error al guardar la foto' });
+    }
+};
+
+// DELETE /pet-history/:id/photo
+const deletePetHistoryPhoto = async (req, res) => {
+    const { id } = req.params;
+    try {
+        const pet = await PetHistory.findByPk(id);
+        if (!pet) {
+            return res.status(404).json({ ok: false, msg: `No existe una mascota con el id ${id}` });
+        }
+        const previousPhoto = pet.photo;
+        await pet.update({ photo: null });
+        await removeUploadedFiles([previousPhoto]);
+        res.json({ ok: true, pet });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ ok: false, msg: 'Error al eliminar la foto' });
+    }
+};
+
 module.exports = {
+    updatePetHistoryPhoto,
+    deletePetHistoryPhoto,
     createPetHistory,
     getPetsHistory,
     getPetHistoryById,
