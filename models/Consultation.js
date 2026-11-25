@@ -59,6 +59,16 @@ Consultation.init({
         type: DataTypes.TEXT, // Diagnostico final presuntivo o confirmativo
         allowNull: true
     },
+    // Consulta reagendada (control de seguimiento). Fecha real (no texto libre) para poder
+    // listar en el dashboard los proximos controles y recordarle al propietario.
+    followUpDate: {
+        type: DataTypes.DATEONLY,
+        allowNull: true
+    },
+    followUpNote: {
+        type: DataTypes.STRING(255), // Motivo del control
+        allowNull: true
+    },
     // Tratamiento Asignado -> tabla consultation_treatments (ver ConsultationTreatment)
     // Pruebas Diagnosticas Complementarias -> tabla consultation_complementary_tests
     state: {

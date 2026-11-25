@@ -1,4 +1,7 @@
+const { Op } = require('sequelize');
+const sequelize = require('../config/database');
 const { OwnerHistory, PetHistory, City, Municipality, Parish } = require('../models/associations');
+const { destroyPetWithHistory } = require('./petHistoryControllers');
 
 // Incluye parroquia -> municipio -> ciudad del propietario
 const locationInclude = {
@@ -66,7 +69,7 @@ const getOwnersHistory = async (req, res) => {
     try {
         const owners = await OwnerHistory.findAll({
             include: [
-                { model: PetHistory, as: 'pets', attributes: ['id', 'name', 'petType'] },
+                { model: PetHistory, as: 'pets', attributes: ['id', 'name', 'petType'], where: { state: true }, required: false },
                 locationInclude
             ],
             order: [['lastName', 'ASC'], ['name', 'ASC']]
@@ -86,7 +89,7 @@ const getOwnerHistoryById = async (req, res) => {
 
     try {
         const owner = await OwnerHistory.findByPk(id, {
-            include: [{ model: PetHistory, as: 'pets' }, locationInclude]
+            include: [{ model: PetHistory, as: 'pets', where: { state: true }, required: false }, locationInclude]
         });
 
         if (!owner) {
@@ -109,6 +112,18 @@ const updateOwnerHistory = async (req, res) => {
     const { name, lastName, idNumber, address, phone } = req.body;
 
     try {
+        const owner = await OwnerHistory.findByPk(id);
+        if (!owner) {
+            return res.status(404).json({ ok: false, msg: `No existe un propietario con el id ${id}` });
+        }
+
+        if (idNumber && idNumber !== owner.idNumber) {
+            const duplicated = await OwnerHistory.findOne({ where: { idNumber, id: { [Op.ne]: id } } });
+            if (duplicated) {
+                return res.status(400).json({ ok: false, msg: 'Ya existe otro propietario registrado con esa cédula' });
+            }
+        }
+
         const data = { name, lastName, idNumber, address, phone };
 
         // Solo se modifica la parroquia si viene en el body
@@ -177,18 +192,23 @@ const deleteOwnerHistory = async (req, res) => {
             });
         }
 
-        const petExists = await PetHistory.findOne({
-            where: { ownerId: id }
-        });
-
-        if (petExists) {
+        // Solo bloquean la eliminacion las mascotas activas
+        const activePets = await PetHistory.count({ where: { ownerId: id, state: true } });
+        if (activePets > 0) {
             return res.status(400).json({
                 ok: false,
-                msg: 'No se puede eliminar el propietario porque tiene mascotas asociadas'
+                msg: `No se puede eliminar el propietario porque tiene ${activePets} mascota${activePets === 1 ? '' : 's'} asociada${activePets === 1 ? '' : 's'}. Elimine o reasigne primero sus mascotas.`
             });
         }
 
-        await owner.destroy();
+        // Las mascotas inactivas (eliminadas logicamente antes) se borran con su historia
+        await sequelize.transaction(async (t) => {
+            const inactivePets = await PetHistory.findAll({ where: { ownerId: id }, attributes: ['id'], transaction: t });
+            for (const pet of inactivePets) {
+                await destroyPetWithHistory(pet.id, t);
+            }
+            await owner.destroy({ transaction: t });
+        });
 
         res.json({
             ok: true,

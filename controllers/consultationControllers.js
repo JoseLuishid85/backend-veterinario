@@ -84,8 +84,32 @@ function validateRequired(data) {
     const missing = [];
     if (!String(data.date ?? '').trim()) missing.push('fecha');
     if (!String(data.consultationReason ?? '').trim()) missing.push('motivo de la consulta');
-    return missing.length ? `Campos obligatorios: ${missing.join(' y ')}` : null;
+    if (missing.length) return `Campos obligatorios: ${missing.join(' y ')}`;
+    if (data.followUpDate && !isValidDateOnly(data.followUpDate)) return 'La fecha del control no es válida';
+    return null;
 }
+
+// "YYYY-MM-DD" que corresponde a una fecha real
+function isValidDateOnly(value) {
+    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value));
+    if (!match) return false;
+    const [, y, m, d] = match.map(Number);
+    const date = new Date(y, m - 1, d);
+    return date.getFullYear() === y && date.getMonth() === m - 1 && date.getDate() === d;
+}
+
+// Fecha local "YYYY-MM-DD" (para comparar con columnas DATEONLY)
+function toDateOnly(date) {
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
+// Consulta reagendada: sin fecha se limpia tambien el motivo del control
+const pickFollowUp = (data) => {
+    const followUpDate = data.followUpDate || null;
+    const note = typeof data.followUpNote === 'string' ? data.followUpNote.trim() : '';
+    return { followUpDate, followUpNote: followUpDate && note ? note.slice(0, 255) : null };
+};
 
 // Datos anamnesicos que viven en la historia medica (se actualizan desde el formulario de consulta)
 const pickAnamnesis = (data) => ({
@@ -137,7 +161,8 @@ const createConsultation = async (req, res) => {
                 demeanor: data.demeanor,
                 demeanorOther: data.demeanorOther,
                 findings: data.findings,
-                diagnosis: data.diagnosis
+                diagnosis: data.diagnosis,
+                ...pickFollowUp(data)
             }, { transaction });
 
             // 4. Detalle de organos, pruebas complementarias y tratamiento
@@ -163,14 +188,18 @@ const createConsultation = async (req, res) => {
 //   ?today=true  -> solo las consultas registradas hoy (por createdAt, ya que "date" es texto libre)
 //   ?yesterday=true -> solo las consultas registradas ayer (para el seguimiento)
 //   ?week=true   -> consultas de esta semana, del lunes hasta ayer (seguimiento del sabado)
+//   ?followUp=true -> consultas reagendadas con control desde hoy en adelante (orden: el mas proximo primero)
 //   ?limit=N     -> cantidad maxima (por defecto 20, hasta 1000)
 const getConsultations = async (req, res) => {
     const where = { state: true };
+    const isFollowUp = req.query.followUp === 'true';
 
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
 
-    if (req.query.today === 'true' || req.query.yesterday === 'true') {
+    if (isFollowUp) {
+        where.followUpDate = { [Op.gte]: toDateOnly(todayStart) };
+    } else if (req.query.today === 'true' || req.query.yesterday === 'true') {
         const start = new Date(todayStart);
         if (req.query.yesterday === 'true') start.setDate(start.getDate() - 1);
         const end = new Date(start);
@@ -193,7 +222,9 @@ const getConsultations = async (req, res) => {
         const consultations = await Consultation.findAll({
             where,
             limit,
-            order: [['createdAt', 'DESC'], ['id', 'DESC']],
+            order: isFollowUp
+                ? [['followUpDate', 'ASC'], ['id', 'ASC']]
+                : [['createdAt', 'DESC'], ['id', 'DESC']],
             include: [
                 {
                     model: MedicalRecord,
@@ -276,7 +307,8 @@ const updateConsultation = async (req, res) => {
                 demeanor: data.demeanor,
                 demeanorOther: data.demeanorOther,
                 findings: data.findings,
-                diagnosis: data.diagnosis
+                diagnosis: data.diagnosis,
+                ...pickFollowUp(data)
             }, { transaction });
 
             await saveConsultationDetails(consultation.id, data, transaction);
